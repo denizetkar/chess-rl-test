@@ -1,4 +1,5 @@
 import torch
+import logging
 
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -27,6 +28,11 @@ from torchrl.record.loggers import TensorboardLogger
 
 if __name__ == "__main__":
     torch.manual_seed(0)
+    logging.basicConfig(
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S %z",
+        level=logging.INFO,
+    )
 
     # HYPERPARAMS
     is_fork = multiprocessing.get_start_method() == "fork"
@@ -172,7 +178,7 @@ if __name__ == "__main__":
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, outer_epochs, 0.0)
 
     logger = TensorboardLogger(exp_name="Chess PPO", log_dir="tb_logs")
-    for td_data in collector:
+    for outer_i, td_data in enumerate(collector):
 
         with torch.no_grad():
             GAE(
@@ -185,7 +191,9 @@ if __name__ == "__main__":
         data_view = td_data.reshape(-1)
         replay_buffer.extend(data_view)
 
-        for _ in range(inner_epochs):
+        logging.info(f"Outer epoch {outer_i}")
+        for inner_i in range(inner_epochs):
+            logging.info(f"Inner epoch {inner_i}")
             for _ in range(training_iters):
                 subdata: TensorDict = replay_buffer.sample()
                 loss_vals: TensorDict = loss_module(subdata)
@@ -203,8 +211,18 @@ if __name__ == "__main__":
                 optim.zero_grad()
 
         done_data = transforms.inv(td_data)[env.OBSERVATION_KEY, "turn"]
-        episode_reward_mean = td_data.get(("next", "agents", "episode_reward"))[done_data].mean().item()
-        logger.log_scalar("episode_reward_mean", episode_reward_mean)
+        selected_rewards = td_data.get(("next", "agents", "episode_reward")).gather(
+            index=done_data.unsqueeze(-2), dim=-2
+        )
+        episode_reward_min = selected_rewards.min().item()
+        episode_reward_mean = selected_rewards.mean().item()
+        episode_reward_max = selected_rewards.max().item()
+        logger.log_scalar("episode_reward_min", episode_reward_min, step=outer_i)
+        logger.log_scalar("episode_reward_mean", episode_reward_mean, step=outer_i)
+        logger.log_scalar("episode_reward_max", episode_reward_max, step=outer_i)
+        logging.info(
+            "Min/Average/Max episode reward: %f/%f/%f", episode_reward_min, episode_reward_mean, episode_reward_max
+        )
 
         collector.update_policy_weights_()
         scheduler.step()
