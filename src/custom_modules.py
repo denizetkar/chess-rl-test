@@ -29,3 +29,16 @@ class Split(nn.Module):
     def forward(self, val: torch.Tensor):
         split_val = torch.split(val, self.split_size_or_sections, self.dim)
         return split_val
+
+
+class NegConcat(nn.Module):
+    def __init__(self, *args, dim: int = -1, neg_first: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.dim = dim
+        self.neg_first = neg_first
+
+    def forward(self, val: torch.Tensor):
+        first, second = val, -val
+        if self.neg_first:
+            first, second = second, first
+        return torch.cat([first, second], dim=self.dim)

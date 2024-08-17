@@ -11,7 +11,7 @@ from torchrl.envs import EnvBase
 # from torchrl.envs.utils import check_env_specs
 
 from torchrl.modules import MLP, ProbabilisticActor
-from custom_modules import ExpandNewDimension
+from custom_modules import ExpandNewDimension, NegConcat
 from tensordict.nn import InteractionType
 from custom_distribution import DependentCategoricalsDistribution
 
@@ -101,13 +101,17 @@ def create_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.
         TensorDictModule(
             MLP(
                 in_features=obs_without_turn_total_dims,
-                out_features=base_env.n_agents,  # One state value estimation for each agent
+                out_features=1,
                 depth=2,
                 num_cells=256,
                 activation_class=torch.nn.PReLU,
             ),
             in_keys=[*obs_without_turn_keys],
-            out_keys=[("agents", "state_value")],
+            out_keys=["state_value"],
+        ),
+        # Single state value estimation. Invert for the white player
+        TensorDictModule(
+            NegConcat(dim=-1, neg_first=False), in_keys=[("state_value")], out_keys=[("agents", "state_value")]
         ),
         # Unsqueeze state_value from the last dimension
         TensorDictModule(
