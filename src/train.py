@@ -11,7 +11,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 
 from chess_env import ChessEnv
 from torchrl.envs.transforms import TransformedEnv, Compose
-from torchrl.envs import ParallelEnv
+from torchrl.envs import ParallelEnv, RewardSum
 
 # from torchrl.envs.utils import check_env_specs
 
@@ -21,6 +21,8 @@ from tensordict.nn import InteractionType
 from custom_distribution import DependentCategoricalsDistribution
 
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
+
+from torchrl.record.loggers import TensorboardLogger
 
 
 if __name__ == "__main__":
@@ -49,7 +51,9 @@ if __name__ == "__main__":
     entropy_eps = 1e-4
 
     env = ChessEnv()
-    transforms = Compose(*env.create_obs_transforms())
+    transforms = Compose(
+        *env.create_obs_transforms(), RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")])
+    )
 
     def create_tenv():
         env = ChessEnv()
@@ -167,7 +171,7 @@ if __name__ == "__main__":
     optim = torch.optim.Adam(loss_module.parameters(), lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, outer_epochs, 0.0)
 
-    episode_reward_mean_list = []
+    logger = TensorboardLogger(exp_name="Chess PPO", log_dir="tb_logs")
     for td_data in collector:
 
         with torch.no_grad():
@@ -197,6 +201,10 @@ if __name__ == "__main__":
                 torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_grad_norm)
                 optim.step()
                 optim.zero_grad()
+
+        done_data = transforms.inv(td_data)[env.OBSERVATION_KEY, "turn"]
+        episode_reward_mean = td_data.get(("next", "agents", "episode_reward"))[done_data].mean().item()
+        logger.log_scalar("episode_reward_mean", episode_reward_mean)
 
         collector.update_policy_weights_()
         scheduler.step()

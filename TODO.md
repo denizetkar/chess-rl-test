@@ -20,9 +20,9 @@
   - `dist.log_prob(action)` should return `a1_masked_categorical.log_prob(a1) + a2_masked_categorical.log_prob(a2)`
     - Because `P(a1, a2) = P(a1) * P(a2 | a1)`
 
----
-
 - Parallelize traj collection: `ParallelEnv` or `MultiSyncDataCollector` ???
+
+---
 
 - Maybe turn categorical vars to one-hot vectors (?)
 
