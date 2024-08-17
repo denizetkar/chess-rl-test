@@ -15,7 +15,7 @@ from torchrl.envs import ParallelEnv, RewardSum
 
 # from torchrl.envs.utils import check_env_specs
 
-from actor_critic import get_actor, get_critic
+from actor_critic import create_actor, create_critic
 
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
 
@@ -66,8 +66,8 @@ if __name__ == "__main__":
     penv = ParallelEnv(n_envs, create_tenv)
     # penv = create_tenv()
 
-    actor = get_actor(env, penv, default_device)
-    critic = get_critic(env, penv, default_device)
+    actor = create_actor(env, penv, default_device)
+    critic = create_critic(env, penv, default_device)
 
     collector = SyncDataCollector(
         penv,

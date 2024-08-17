@@ -4,7 +4,7 @@ import logging
 import torch
 from tensordict import TensorDictBase, TensorDict
 from torchrl.envs import EnvBase, ParallelEnv
-from torchrl.envs.transforms import TransformedEnv, ObservationNorm, Compose
+from torchrl.envs.transforms import TransformedEnv, ObservationNorm, Compose, Transform
 from torchrl.data import CompositeSpec, DiscreteTensorSpec, BoundedTensorSpec
 
 from custom_tensor_specs import DependentDiscreteTensorsSpec
@@ -154,7 +154,7 @@ class ChessEnv(EnvBase):
         obs_samples: TensorDict = self.full_observation_spec.rand((1000,)).type(torch.float64)
         mu = obs_samples.mean(dim=0)
         std = obs_samples.std(dim=0)
-        obs_transforms: list[ObservationNorm] = []
+        obs_transforms: list[Transform] = []
         for obs_key in self.observation_keys:
             obs_transforms.append(
                 DiscreteToContinuousTransform(

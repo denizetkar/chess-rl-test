@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -14,10 +15,10 @@ from tensordict.nn import InteractionType
 from custom_distribution import DependentCategoricalsDistribution
 
 
-def get_actor(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device):
-
+def create_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device):
     action_dims = [a.n for a in final_env.full_action_spec[base_env.action_key].values()]
     obs_total_dims = sum([final_env.full_observation_spec[key].shape[-1] for key in base_env.observation_keys])
+    # Only thing to persist to disk is `{k: v.state_dict() for k, v in action_nets.items()}`
     action_nets = {
         i: MLP(
             in_features=obs_total_dims + i,
@@ -28,6 +29,17 @@ def get_actor(base_env: ChessEnv, final_env: EnvBase, default_device: torch.devi
         ).to(device=default_device)
         for i, action_dim in enumerate(action_dims)
     }
+    return action_nets
+
+
+def create_actor(
+    base_env: ChessEnv,
+    final_env: EnvBase,
+    default_device: torch.device,
+    action_nets: dict[int, nn.Module] | None = None,
+):
+    if action_nets is None:
+        action_nets = create_action_nets(base_env, final_env, default_device)
 
     def logits_fn(observations: TensorDict, actions: list[torch.Tensor]) -> torch.Tensor:
         i = len(actions)
@@ -36,6 +48,8 @@ def get_actor(base_env: ChessEnv, final_env: EnvBase, default_device: torch.devi
         logit_i: torch.Tensor = action_nets[i](*obs_tensors, *concatable_actions)
         return logit_i
 
+    # Nothing to persist to disk here
+    action_dims = [a.n for a in final_env.full_action_spec[base_env.action_key].values()]
     identity_module = TensorDictModule(module=lambda *args: args, in_keys=[], out_keys=[])
     actor = ProbabilisticActor(
         module=identity_module,
@@ -64,7 +78,7 @@ def get_actor(base_env: ChessEnv, final_env: EnvBase, default_device: torch.devi
     return actor
 
 
-def get_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device):
+def create_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device):
     obs_without_turn_keys = [key for key in base_env.observation_keys if key != (base_env.OBSERVATION_KEY, "turn")]
     obs_without_turn_total_dims = sum([final_env.full_observation_spec[key].shape[-1] for key in obs_without_turn_keys])
     critic_modules = (
@@ -86,6 +100,7 @@ def get_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.dev
             out_keys=[("agents", "state_value")],
         ),
     )
+    # Only thing to persist to disk is `critic.state_dict()`
     critic = TensorDictSequential(*critic_modules).to(device=default_device)
 
     return critic
