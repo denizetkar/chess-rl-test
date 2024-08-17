@@ -1,3 +1,4 @@
+from typing import Any
 import chess
 import logging
 
@@ -172,6 +173,19 @@ class ChessEnv(EnvBase):
             )
             obs_transforms.append(DoubleToFloat(in_keys=[obs_key], out_keys=[obs_key], in_keys_inv=[obs_key]))
 
+        return obs_transforms
+
+    @staticmethod
+    def save_obs_transforms(obs_transforms: list[Transform], save_path: str):
+        with open(save_path, "wb") as f:
+            torch.save([t.state_dict() for t in obs_transforms], f)
+
+    def load_obs_transforms(self, save_path: str):
+        obs_transforms = self.create_obs_transforms()
+        with open(save_path, "rb") as f:
+            params: list[dict[str, Any]] = torch.load(f)
+        for t, param in zip(obs_transforms, params):
+            t.load_state_dict(param)
         return obs_transforms
 
 

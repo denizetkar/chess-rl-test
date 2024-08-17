@@ -1,3 +1,4 @@
+from typing import Any
 import torch
 import torch.nn as nn
 
@@ -18,7 +19,7 @@ from custom_distribution import DependentCategoricalsDistribution
 def create_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device):
     action_dims = [a.n for a in final_env.full_action_spec[base_env.action_key].values()]
     obs_total_dims = sum([final_env.full_observation_spec[key].shape[-1] for key in base_env.observation_keys])
-    # Only thing to persist to disk is `{k: v.state_dict() for k, v in action_nets.items()}`
+    # Only thing to persist to disk is `action_nets`
     action_nets = {
         i: MLP(
             in_features=obs_total_dims + i,
@@ -29,6 +30,21 @@ def create_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: t
         ).to(device=default_device)
         for i, action_dim in enumerate(action_dims)
     }
+    return action_nets
+
+
+def save_action_nets(action_nets: dict[int, nn.Module], save_path: str):
+    with open(save_path, "wb") as f:
+        params = {k: v.state_dict() for k, v in action_nets.items()}
+        torch.save(params, f)
+
+
+def load_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device, save_path: str):
+    action_nets = create_action_nets(base_env, final_env, default_device)
+    with open(save_path, "rb") as f:
+        params: dict[int, dict[str, Any]] = torch.load(f)
+    for i in action_nets.keys():
+        action_nets[i].load_state_dict(params[i])
     return action_nets
 
 
@@ -103,4 +119,17 @@ def create_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.
     # Only thing to persist to disk is `critic.state_dict()`
     critic = TensorDictSequential(*critic_modules).to(device=default_device)
 
+    return critic
+
+
+def save_critic(critic: TensorDictSequential, save_path: str):
+    with open(save_path, "wb") as f:
+        torch.save(critic.state_dict(), f)
+
+
+def load_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device, save_path: str):
+    critic = create_critic(base_env, final_env, default_device)
+    with open(save_path, "rb") as f:
+        params: dict[str, Any] = torch.load(f)
+    critic.load_state_dict(params)
     return critic
