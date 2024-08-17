@@ -192,8 +192,7 @@ if __name__ == "__main__":
         replay_buffer.extend(data_view)
 
         logging.info(f"Outer epoch {outer_i}")
-        for inner_i in range(inner_epochs):
-            logging.info(f"Inner epoch {inner_i}")
+        for _ in range(inner_epochs):
             for _ in range(training_iters):
                 subdata: TensorDict = replay_buffer.sample()
                 loss_vals: TensorDict = loss_module(subdata)
@@ -210,19 +209,20 @@ if __name__ == "__main__":
                 optim.step()
                 optim.zero_grad()
 
-        done_data = transforms.inv(td_data)[env.OBSERVATION_KEY, "turn"]
-        selected_rewards = td_data.get(("next", "agents", "episode_reward")).gather(
-            index=done_data.unsqueeze(-2), dim=-2
-        )
+        turn_data = transforms.inv(td_data)[env.OBSERVATION_KEY, "turn"].unsqueeze(-2)
+        selected_rewards = td_data.get(("next", "agents", "episode_reward")).gather(index=turn_data, dim=-2)
         episode_reward_min = selected_rewards.min().item()
         episode_reward_mean = selected_rewards.mean().item()
         episode_reward_max = selected_rewards.max().item()
+        episode_games_done = td_data["next", "done"].sum().item()
         logger.log_scalar("episode_reward_min", episode_reward_min, step=outer_i)
         logger.log_scalar("episode_reward_mean", episode_reward_mean, step=outer_i)
         logger.log_scalar("episode_reward_max", episode_reward_max, step=outer_i)
+        logger.log_scalar("episode_games_done", episode_games_done, step=outer_i)
         logging.info(
             "Min/Average/Max episode reward: %f/%f/%f", episode_reward_min, episode_reward_mean, episode_reward_max
         )
+        logging.info("Episode games done: %d", episode_games_done)
 
         collector.update_policy_weights_()
         scheduler.step()
