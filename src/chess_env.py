@@ -106,7 +106,7 @@ class ChessEnv(EnvBase):
         d_td = self.full_done_spec.zero()
         is_done = self.board.is_game_over()
         d_td["done"].fill_(is_done)
-        d_td[self.done_key].fill_(is_done)
+        d_td["agents", "done"].fill_(is_done)
         return d_td
 
     @property
