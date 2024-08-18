@@ -20,31 +20,32 @@ def create_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: t
     action_dims = [a.n for a in final_env.full_action_spec[base_env.action_key].values()]
     obs_total_dims = sum([final_env.full_observation_spec[key].shape[-1] for key in base_env.observation_keys])
     # Only thing to persist to disk is `action_nets`
-    action_nets = {
-        i: MLP(
-            in_features=obs_total_dims + i,
-            out_features=action_dim,
-            depth=2,
-            num_cells=256,
-            activation_class=torch.nn.PReLU,
-        ).to(device=default_device)
-        for i, action_dim in enumerate(action_dims)
-    }
+    action_nets = nn.ModuleDict(
+        {
+            str(i): MLP(
+                in_features=obs_total_dims + i,
+                out_features=action_dim,
+                depth=2,
+                num_cells=256,
+                activation_class=torch.nn.PReLU,
+            ).to(device=default_device)
+            for i, action_dim in enumerate(action_dims)
+        }
+    )
     return action_nets
 
 
-def save_action_nets(action_nets: dict[int, nn.Module], save_path: str):
+def save_action_nets(action_nets: nn.ModuleDict, save_path: str):
     with open(save_path, "wb") as f:
-        params = {k: v.state_dict() for k, v in action_nets.items()}
+        params = action_nets.state_dict()
         torch.save(params, f)
 
 
 def load_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device, save_path: str):
     action_nets = create_action_nets(base_env, final_env, default_device)
     with open(save_path, "rb") as f:
-        params: dict[int, dict[str, Any]] = torch.load(f)
-    for i in action_nets.keys():
-        action_nets[i].load_state_dict(params[i])
+        params: dict[str, Any] = torch.load(f)
+    action_nets.load_state_dict(params)
     return action_nets
 
 
@@ -52,7 +53,7 @@ def create_actor(
     base_env: ChessEnv,
     final_env: EnvBase,
     default_device: torch.device,
-    action_nets: dict[int, nn.Module] | None,
+    action_nets: nn.ModuleDict | None,
 ):
     if action_nets is None:
         action_nets = create_action_nets(base_env, final_env, default_device)
@@ -61,7 +62,7 @@ def create_actor(
         i = len(actions)
         obs_tensors = [observations[key[1:]] for key in base_env.observation_keys]
         concatable_actions = [a.unsqueeze(-1) for a in actions]
-        logit_i: torch.Tensor = action_nets[i](*obs_tensors, *concatable_actions)
+        logit_i: torch.Tensor = action_nets[str(i)](*obs_tensors, *concatable_actions)
         return logit_i
 
     # Nothing to persist to disk here
