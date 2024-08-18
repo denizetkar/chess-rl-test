@@ -44,12 +44,12 @@ if __name__ == "__main__":
     inner_epochs = 10
     training_iters = 1
     minibatch_size = frames_per_batch // training_iters
-    max_grad_norm = 1.0
+    max_grad_norm = 10.0
     lr = 1e-4
 
     clip_epsilon = 0.1
-    gamma = 0.999
-    lmbda = 0.9
+    gamma = 0.99
+    lmbda = 0.95
     entropy_eps = 1e-4
 
     env = ChessEnv()
