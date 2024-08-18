@@ -29,13 +29,14 @@ class ChessEnv(EnvBase):
             run_type_checks=run_type_checks,
             allow_done_after_reset=allow_done_after_reset,
         )
-        piece_count = chess.PIECE_TYPES.stop - chess.PIECE_TYPES.start
         self.n_agents = 2
         self.observation_spec = CompositeSpec(
             {
                 ChessEnv.OBSERVATION_KEY: CompositeSpec(
-                    piece_at_pos=DiscreteTensorSpec(piece_count, shape=(64,)),
-                    owner_at_pos=DiscreteTensorSpec(self.n_agents, shape=(64,)),
+                    # 0 for no piece at that position
+                    piece_at_pos=DiscreteTensorSpec(len(chess.PIECE_TYPES) + 1, shape=(64,)),
+                    # 0 for no piece at that position
+                    owner_at_pos=DiscreteTensorSpec(self.n_agents + 1, shape=(64,)),
                     turn=DiscreteTensorSpec(self.n_agents, shape=(1,)),
                 )
             },
@@ -84,8 +85,8 @@ class ChessEnv(EnvBase):
         piece_positions, piece_types, piece_owners = [], [], []
         for piece_pos, piece in self.board.piece_map().items():
             piece_positions.append(piece_pos)
-            piece_types.append(piece.piece_type - 1)
-            piece_owners.append(int(piece.color))
+            piece_types.append(piece.piece_type)
+            piece_owners.append(int(piece.color) + 1)
         piece_positions = torch.tensor(piece_positions, device=obs_td.device)
         piece_types = torch.tensor(piece_types, device=obs_td.device)
         piece_owners = torch.tensor(piece_owners, device=obs_td.device)
