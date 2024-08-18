@@ -52,7 +52,7 @@ def create_actor(
     base_env: ChessEnv,
     final_env: EnvBase,
     default_device: torch.device,
-    action_nets: dict[int, nn.Module] | None = None,
+    action_nets: dict[int, nn.Module] | None,
 ):
     if action_nets is None:
         action_nets = create_action_nets(base_env, final_env, default_device)
