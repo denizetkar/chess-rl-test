@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 import torch
 import torch.nn as nn
 
@@ -26,7 +26,7 @@ def create_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: t
                 in_features=obs_total_dims + i,
                 out_features=action_dim,
                 depth=2,
-                num_cells=256,
+                num_cells=512,
                 activation_class=torch.nn.PReLU,
             ).to(device=default_device)
             for i, action_dim in enumerate(action_dims)
@@ -49,14 +49,7 @@ def load_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: tor
     return action_nets
 
 
-def create_actor(
-    base_env: ChessEnv,
-    final_env: EnvBase,
-    default_device: torch.device,
-    action_nets: nn.ModuleDict | None,
-):
-    if action_nets is None:
-        action_nets = create_action_nets(base_env, final_env, default_device)
+def create_logits_fn(base_env: ChessEnv, action_nets: nn.ModuleDict):
 
     def logits_fn(observations: TensorDict, actions: list[torch.Tensor]) -> torch.Tensor:
         i = len(actions)
@@ -65,6 +58,15 @@ def create_actor(
         logit_i: torch.Tensor = action_nets[str(i)](*obs_tensors, *concatable_actions)
         return logit_i
 
+    return logits_fn
+
+
+def create_actor(
+    base_env: ChessEnv,
+    final_env: EnvBase,
+    default_device: torch.device,
+    logits_fn: Callable[[TensorDict, list[torch.Tensor]], torch.Tensor],
+):
     # Nothing to persist to disk here
     action_dims = [a.n for a in final_env.full_action_spec[base_env.action_key].values()]
     identity_module = TensorDictModule(module=lambda *args: args, in_keys=[], out_keys=[])
@@ -104,7 +106,7 @@ def create_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.
                 in_features=obs_without_turn_total_dims,
                 out_features=1,
                 depth=2,
-                num_cells=256,
+                num_cells=512,
                 activation_class=torch.nn.PReLU,
             ),
             in_keys=[*obs_without_turn_keys],

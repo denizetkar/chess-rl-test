@@ -17,6 +17,9 @@ torchrl = "~=0.5.0"
 vmas = "~=1.4.2"
 chess = "~=1.10.0"
 tensorboard = "~=2.17.1"
+pandas = "~=2.2.2"
+dask = {extras = ["dataframe", "distributed"], version = "~=2024.8.1"}
+lightning = "~=2.4.0"
 
 [dev-packages]
 
