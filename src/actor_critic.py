@@ -1,4 +1,5 @@
 from typing import Any, Callable
+import os
 import torch
 import torch.nn as nn
 
@@ -36,15 +37,17 @@ def create_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: t
 
 
 def save_action_nets(action_nets: nn.ModuleDict, save_path: str):
-    with open(save_path, "wb") as f:
-        params = action_nets.state_dict()
-        torch.save(params, f)
+    torch.save(action_nets.state_dict(), save_path)
 
 
-def load_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device, save_path: str):
+def load_action_nets(
+    base_env: ChessEnv, final_env: EnvBase, default_device: torch.device, save_path: str | None = None
+):
     action_nets = create_action_nets(base_env, final_env, default_device)
-    with open(save_path, "rb") as f:
-        params: dict[str, Any] = torch.load(f)
+    if save_path is None or not os.path.exists(save_path):
+        return action_nets
+
+    params: dict[str, Any] = torch.load(save_path)
     action_nets.load_state_dict(params)
     return action_nets
 
@@ -130,13 +133,14 @@ def create_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.
 
 
 def save_critic(critic: TensorDictSequential, save_path: str):
-    with open(save_path, "wb") as f:
-        torch.save(critic.state_dict(), f)
+    torch.save(critic.state_dict(), save_path)
 
 
-def load_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device, save_path: str):
+def load_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device, save_path: str | None = None):
     critic = create_critic(base_env, final_env, default_device)
-    with open(save_path, "rb") as f:
-        params: dict[str, Any] = torch.load(f)
+    if save_path is None or not os.path.exists(save_path):
+        return critic
+
+    params: dict[str, Any] = torch.load(save_path)
     critic.load_state_dict(params)
     return critic

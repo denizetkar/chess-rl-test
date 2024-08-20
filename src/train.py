@@ -1,5 +1,6 @@
 import torch
 import logging
+import os
 
 from tensordict import TensorDict
 from torch import multiprocessing
@@ -15,7 +16,7 @@ from torchrl.envs import ParallelEnv, RewardSum
 
 # from torchrl.envs.utils import check_env_specs
 
-from actor_critic import create_action_nets, create_actor, create_critic, create_logits_fn
+from actor_critic import load_action_nets, save_action_nets, create_actor, load_critic, save_critic, create_logits_fn
 
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
 
@@ -52,9 +53,14 @@ if __name__ == "__main__":
     lmbda = 0.95
     entropy_eps = 1e-4
 
+    obs_transforms_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-obs_transforms.pt"
+    action_nets_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-action_nets.pt"
+    critic_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-critic.pt"
+
     env = ChessEnv()
     transforms = Compose(
-        *env.create_obs_transforms(), RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")])
+        *env.load_obs_transforms(obs_transforms_save_path),
+        RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
     )
 
     def create_tenv():
@@ -66,9 +72,9 @@ if __name__ == "__main__":
     penv = ParallelEnv(n_envs, create_tenv)
     # penv = create_tenv()
 
-    action_nets = create_action_nets(env, penv, default_device)
+    action_nets = load_action_nets(env, penv, default_device, action_nets_save_path)
     actor = create_actor(env, penv, default_device, create_logits_fn(env, action_nets))
-    critic = create_critic(env, penv, default_device)
+    critic = load_critic(env, penv, default_device, critic_save_path)
 
     collector = SyncDataCollector(
         penv,
@@ -155,4 +161,5 @@ if __name__ == "__main__":
         collector.update_policy_weights_()
         scheduler.step()
 
-    pass
+    save_action_nets(action_nets, os.path.splitext(action_nets_save_path)[0] + "-PPO.pt")
+    save_critic(critic, os.path.splitext(critic_save_path)[0] + "-PPO.pt")

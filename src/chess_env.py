@@ -1,6 +1,7 @@
 from typing import Any
 import chess
 import logging
+import os
 
 import torch
 from tensordict import TensorDictBase, TensorDict
@@ -177,17 +178,20 @@ class ChessEnv(EnvBase):
         return obs_transforms
 
     @staticmethod
-    def save_obs_transforms(obs_transforms: list[Transform], save_path: str):
-        with open(save_path, "wb") as f:
-            torch.save([t.state_dict() for t in obs_transforms], f)
+    def save_obs_transforms(obs_transforms_list: list[Transform], save_path: str):
+        # To be consistent with how we save it in `pretrain.py`:
+        obs_transforms = Compose(*obs_transforms_list)
+        torch.save(obs_transforms.state_dict(), save_path)
 
-    def load_obs_transforms(self, save_path: str):
-        obs_transforms = self.create_obs_transforms()
-        with open(save_path, "rb") as f:
-            params: list[dict[str, Any]] = torch.load(f)
-        for t, param in zip(obs_transforms, params):
-            t.load_state_dict(param)
-        return obs_transforms
+    def load_obs_transforms(self, save_path: str | None = None):
+        obs_transforms_list = self.create_obs_transforms()
+        if save_path is None or not os.path.exists(save_path):
+            return obs_transforms_list
+
+        obs_transforms = Compose(*obs_transforms_list)
+        params: list[dict[str, Any]] = torch.load(save_path)
+        obs_transforms.load_state_dict(params)
+        return obs_transforms_list
 
 
 if __name__ == "__main__":
