@@ -40,6 +40,7 @@ if __name__ == "__main__":
     n_envs = 6
     frames_per_batch = frames_per_worker_batch * n_envs
 
+    save_every_n_outer_epochs = 10
     outer_epochs = 1000
     total_frames = frames_per_batch * outer_epochs
     inner_epochs = 10
@@ -160,6 +161,10 @@ if __name__ == "__main__":
 
         collector.update_policy_weights_()
         scheduler.step()
+
+        if outer_epochs % save_every_n_outer_epochs == 0:
+            save_action_nets(action_nets, os.path.splitext(action_nets_save_path)[0] + "-PPO.pt")
+            save_critic(critic, os.path.splitext(critic_save_path)[0] + "-PPO.pt")
 
     save_action_nets(action_nets, os.path.splitext(action_nets_save_path)[0] + "-PPO.pt")
     save_critic(critic, os.path.splitext(critic_save_path)[0] + "-PPO.pt")

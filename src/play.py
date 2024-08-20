@@ -7,7 +7,7 @@ from torchrl.envs.transforms import TransformedEnv, Compose
 
 if __name__ == "__main__":
     obs_transforms_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-obs_transforms.pt"
-    action_nets_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-action_nets.pt"
+    action_nets_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-action_nets-PPO.pt"
     default_device = torch.device("cpu")
 
     env = ChessEnv()
