@@ -19,7 +19,10 @@ from custom_distribution import DependentCategoricalsDistribution
 
 def create_action_nets(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device):
     action_dims = [a.n for a in final_env.full_action_spec[base_env.action_key].values()]
-    obs_total_dims = sum([final_env.full_observation_spec[key].shape[-1] for key in base_env.observation_keys])
+    batch_shape = final_env.full_observation_spec[ChessEnv.OBSERVATION_KEY].shape
+    obs_total_dims = sum(
+        [final_env.full_observation_spec[key].shape[len(batch_shape) :].numel() for key in base_env.observation_keys]
+    )
     # Only thing to persist to disk is `action_nets`
     action_nets = nn.ModuleDict(
         {
@@ -76,7 +79,7 @@ def create_actor(
     actor = ProbabilisticActor(
         module=identity_module,
         spec=final_env.full_action_spec,
-        in_keys={"observations": base_env.OBSERVATION_KEY, "mask": "action_mask"},
+        in_keys={"observations": ChessEnv.OBSERVATION_KEY, "mask": "action_mask"},
         # We shouldn't have to specify the `out_keys` below but otherwise `ProbabilisticActor.__init__` complains about
         # not having `distribution_map` in `distribution_kwargs`. It doesn't allow to customize `CompositeDistribution`
         # that doesn't take `distribution_map` arg. WTF?
@@ -101,8 +104,11 @@ def create_actor(
 
 
 def create_critic(base_env: ChessEnv, final_env: EnvBase, default_device: torch.device):
-    obs_without_turn_keys = [key for key in base_env.observation_keys if key != (base_env.OBSERVATION_KEY, "turn")]
-    obs_without_turn_total_dims = sum([final_env.full_observation_spec[key].shape[-1] for key in obs_without_turn_keys])
+    obs_without_turn_keys = [key for key in base_env.observation_keys if key != (ChessEnv.OBSERVATION_KEY, "turn")]
+    batch_shape = final_env.full_observation_spec[ChessEnv.OBSERVATION_KEY].shape
+    obs_without_turn_total_dims = sum(
+        [final_env.full_observation_spec[key].shape[len(batch_shape) :].numel() for key in obs_without_turn_keys]
+    )
     critic_modules = (
         TensorDictModule(
             MLP(

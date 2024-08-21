@@ -54,9 +54,9 @@ if __name__ == "__main__":
     lmbda = 0.95
     entropy_eps = 1e-4
 
-    obs_transforms_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-obs_transforms.pt"
-    action_nets_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-action_nets.pt"
-    critic_save_path = "./lightning_logs/version_0/checkpoints/epoch=74-step=37575-critic.pt"
+    obs_transforms_save_path = "./lightning_logs/version_1/checkpoints/epoch=34-step=17535-obs_transforms.pt"
+    action_nets_save_path = "./lightning_logs/version_1/checkpoints/epoch=34-step=17535-action_nets.pt"
+    critic_save_path = "./lightning_logs/version_1/checkpoints/epoch=34-step=17535-critic.pt"
 
     env = ChessEnv()
     transforms = Compose(
@@ -136,7 +136,7 @@ if __name__ == "__main__":
                 subdata: TensorDict = replay_buffer.sample()
                 loss_vals: TensorDict = loss_module(subdata)
 
-                turn_data = transforms.inv(subdata)[env.OBSERVATION_KEY, "turn"]
+                turn_data = transforms.inv(subdata)[ChessEnv.OBSERVATION_KEY, "turn"].type(torch.long)
                 losses: TensorDict = (
                     loss_vals.select("loss_objective").auto_batch_size_().gather(index=turn_data, dim=-1).mean()
                 )
@@ -148,7 +148,7 @@ if __name__ == "__main__":
                 optim.step()
                 optim.zero_grad()
 
-        turn_data = transforms.inv(td_data)[env.OBSERVATION_KEY, "turn"].unsqueeze(-2)
+        turn_data = transforms.inv(td_data)[ChessEnv.OBSERVATION_KEY, "turn"].type(torch.long).unsqueeze(-2)
         selected_rewards = td_data.get(("next", "agents", "episode_reward")).gather(index=turn_data, dim=-2)
         episode_reward_mean = selected_rewards.mean().item()
         episode_reward_neg_sum = selected_rewards.type(torch.long).clip(max=0.0).sum().item()

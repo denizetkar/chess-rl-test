@@ -22,8 +22,6 @@
 
 - Parallelize traj collection: `ParallelEnv` or `MultiSyncDataCollector` ???
 
----
-
 - Maybe turn categorical vars to one-hot vectors (?)
 
   ```python

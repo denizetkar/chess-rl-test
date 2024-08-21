@@ -7,7 +7,7 @@ import torch
 from tensordict import TensorDictBase, TensorDict
 from torchrl.envs import EnvBase, ParallelEnv
 from torchrl.envs.transforms import TransformedEnv, ObservationNorm, Compose, Transform
-from torchrl.data import CompositeSpec, DiscreteTensorSpec, BoundedTensorSpec
+from torchrl.data import CompositeSpec, DiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, BoundedTensorSpec
 
 from custom_tensor_specs import DependentDiscreteTensorsSpec
 from custom_transforms import DiscreteToContinuousTransform, DoubleToFloat
@@ -31,12 +31,13 @@ class ChessEnv(EnvBase):
             allow_done_after_reset=allow_done_after_reset,
         )
         self.n_agents = 2
+        self.total_piece_cnt = 2 * len(chess.PIECE_TYPES)
         self.observation_spec = CompositeSpec(
             {
                 ChessEnv.OBSERVATION_KEY: CompositeSpec(
                     # 0 for no piece at that position, 1-6 for black, 7-12 for white pieces
-                    piece_at_pos=DiscreteTensorSpec(2 * len(chess.PIECE_TYPES) + 1, shape=(64,)),
-                    turn=DiscreteTensorSpec(self.n_agents, shape=(1,)),
+                    piece_at_pos=MultiOneHotDiscreteTensorSpec([self.total_piece_cnt] * 64, dtype=torch.bool),
+                    turn=DiscreteTensorSpec(self.n_agents, shape=(1,), dtype=torch.bool),
                 )
             },
             action_mask=DiscreteTensorSpec(2, shape=(64, 64), dtype=torch.bool),
@@ -84,11 +85,11 @@ class ChessEnv(EnvBase):
         piece_positions, piece_types = [], []
         for piece_pos, piece in self.board.piece_map().items():
             piece_positions.append(piece_pos)
-            piece_types.append(int(piece.color) * len(chess.PIECE_TYPES) + piece.piece_type)
+            piece_types.append(int(piece.color) * len(chess.PIECE_TYPES) + piece.piece_type - 1)
         piece_positions = torch.tensor(piece_positions, device=obs_td.device)
         piece_types = torch.tensor(piece_types, device=obs_td.device)
-        obs_td[ChessEnv.OBSERVATION_KEY, "piece_at_pos"][piece_positions] = piece_types
-        obs_td[ChessEnv.OBSERVATION_KEY, "turn"].fill_(int(self.board.turn))
+        obs_td[ChessEnv.OBSERVATION_KEY, "piece_at_pos"][piece_positions * self.total_piece_cnt + piece_types] = True
+        obs_td[ChessEnv.OBSERVATION_KEY, "turn"][...] = self.board.turn
 
         legal_moves = []
         for move in self.board.legal_moves:
@@ -103,8 +104,8 @@ class ChessEnv(EnvBase):
     def done_td(self):
         d_td = self.full_done_spec.zero()
         is_done = self.board.is_game_over()
-        d_td["done"].fill_(is_done)
-        d_td["agents", "done"].fill_(is_done)
+        d_td["done"][...] = is_done
+        d_td["agents", "done"][...] = is_done
         return d_td
 
     @property
@@ -115,10 +116,9 @@ class ChessEnv(EnvBase):
             return r_td
 
         if outcome.winner is None:
-            r_td[self.reward_key].fill_(-1.0)
+            r_td[self.reward_key][...] = -1.0
         else:
-            winner, loser = int(outcome.winner), int(not outcome.winner)
-            indexes = torch.tensor([winner, loser], device=r_td.device)
+            indexes = [int(outcome.winner), int(not outcome.winner)]
             r_td[self.reward_key][indexes] = torch.tensor([[1.0], [-1.0]], device=r_td.device)
         return r_td
 
@@ -202,4 +202,5 @@ if __name__ == "__main__":
         return tenv
 
     penv = ParallelEnv(2, create_tenv)
+    # penv = create_tenv()
     pass

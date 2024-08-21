@@ -16,6 +16,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 
 import lightning as L
+import torch.nn.functional as F
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import Dataset, random_split, DataLoader
 import numpy as np
@@ -52,7 +53,7 @@ def map_game_to_winner_moves(row: pd.Series):
             piece_at_pos = [0] * 64
             for square, piece in game.piece_map().items():
                 index = square  # Use the square index directly
-                piece_at_pos[index] = int(piece.color) * len(chess.PIECE_TYPES) + piece.piece_type
+                piece_at_pos[index] = int(piece.color) * len(chess.PIECE_TYPES) + piece.piece_type - 1
 
             game_data.append(
                 {"piece_at_pos": piece_at_pos, "turn": [int(winner)], "move": [move.from_square, move.to_square]}
@@ -152,6 +153,8 @@ class ChessPretrainingModule(L.LightningModule):
 
     def get_ce_loss(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int):
         piece_at_pos, turn, move = batch
+        # Turn piece_at_pos from categorical to one-hot
+        piece_at_pos = F.one_hot(piece_at_pos, num_classes=2 * len(chess.PIECE_TYPES)).flatten(-2, -1)
         observations = TensorDict(
             {ChessEnv.OBSERVATION_KEY: {"piece_at_pos": piece_at_pos, "turn": turn}}
         ).auto_batch_size_()
@@ -194,7 +197,7 @@ if __name__ == "__main__":
     # Hyperparameters
     max_epochs = 200
     batch_size = 1024
-    lr, min_lr = 5e-4, 1e-6
+    lr, min_lr = 2e-4, 1e-6
     gradient_clip_val = 10.0
 
     piece_at_pos, turn, move = winner_moves_df_to_np_arrays(load_winner_moves_df())
