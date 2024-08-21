@@ -8,16 +8,17 @@ from torchrl.data.tensor_specs import DiscreteTensorSpec
 from utils import _get_next_mask
 
 
-def get_move(td: TensorDict):
+def _get_move_external(td: TensorDict):
     # move_str = input("Your turn. Write your move (UCI):")
     # move = chess.Move.from_uci(move_str)
     actions: list[torch.Tensor] = []
+    actions_td = TensorDict()
     for i in range(2):
         dependent_mask = _get_next_mask([], [64, 64], td["action_mask"], actions)
         action_i = DiscreteTensorSpec(64, device=td.device, mask=dependent_mask).sample()
         actions.append(action_i)
-    move = chess.Move(actions[0].item(), actions[1].item())
-    return move
+        actions_td.set(str(i), action_i)
+    return actions_td
 
 
 if __name__ == "__main__":
@@ -43,13 +44,11 @@ if __name__ == "__main__":
                 # input("Click to continue...")
 
                 if env.board.turn:
-                    move = get_move(td)
-                    td_actor = td.set(
-                        "action", {"0": torch.tensor(move.from_square), "1": torch.tensor(move.to_square)}
-                    )
+                    actions_td = _get_move_external(td)
+                    td_actor: TensorDict = td.set("action", actions_td)
                 else:
-                    td_actor = actor(td)
-                    move = chess.Move(td_actor["action", "0"].item(), td_actor["action", "1"].item())
+                    td_actor: TensorDict = actor(td)
+                move = chess.Move(td_actor["action", "0"].item(), td_actor["action", "1"].item())
                 # print(f"Move: {move}")
 
                 td_step = tenv.step(td_actor)
