@@ -34,10 +34,8 @@ class ChessEnv(EnvBase):
         self.observation_spec = CompositeSpec(
             {
                 ChessEnv.OBSERVATION_KEY: CompositeSpec(
-                    # 0 for no piece at that position
-                    piece_at_pos=DiscreteTensorSpec(len(chess.PIECE_TYPES) + 1, shape=(64,)),
-                    # 0 for no piece at that position
-                    owner_at_pos=DiscreteTensorSpec(self.n_agents + 1, shape=(64,)),
+                    # 0 for no piece at that position, 1-6 for black, 7-12 for white pieces
+                    piece_at_pos=DiscreteTensorSpec(2 * len(chess.PIECE_TYPES) + 1, shape=(64,)),
                     turn=DiscreteTensorSpec(self.n_agents, shape=(1,)),
                 )
             },
@@ -83,16 +81,13 @@ class ChessEnv(EnvBase):
     def observation_td(self):
         obs_td = self.full_observation_spec.zero()
 
-        piece_positions, piece_types, piece_owners = [], [], []
+        piece_positions, piece_types = [], []
         for piece_pos, piece in self.board.piece_map().items():
             piece_positions.append(piece_pos)
-            piece_types.append(piece.piece_type)
-            piece_owners.append(int(piece.color) + 1)
+            piece_types.append(int(piece.color) * len(chess.PIECE_TYPES) + piece.piece_type)
         piece_positions = torch.tensor(piece_positions, device=obs_td.device)
         piece_types = torch.tensor(piece_types, device=obs_td.device)
-        piece_owners = torch.tensor(piece_owners, device=obs_td.device)
         obs_td[ChessEnv.OBSERVATION_KEY, "piece_at_pos"][piece_positions] = piece_types
-        obs_td[ChessEnv.OBSERVATION_KEY, "owner_at_pos"][piece_positions] = piece_owners
         obs_td[ChessEnv.OBSERVATION_KEY, "turn"].fill_(int(self.board.turn))
 
         legal_moves = []
@@ -157,7 +152,7 @@ class ChessEnv(EnvBase):
         torch.manual_seed(seed)
 
     def create_obs_transforms(self):
-        obs_samples: TensorDict = self.full_observation_spec.rand((1000,)).type(torch.float64)
+        obs_samples: TensorDict = self.full_observation_spec.rand((10000,)).type(torch.float64)
         mu = obs_samples.mean(dim=0)
         std = obs_samples.std(dim=0)
         obs_transforms: list[Transform] = []

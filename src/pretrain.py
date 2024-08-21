@@ -50,19 +50,12 @@ def map_game_to_winner_moves(row: pd.Series):
         # Check if it's the winner's turn
         if game.turn == winner:
             piece_at_pos = [0] * 64
-            owner_at_pos = [0] * 64
             for square, piece in game.piece_map().items():
                 index = square  # Use the square index directly
-                piece_at_pos[index] = piece.piece_type
-                owner_at_pos[index] = int(piece.color) + 1  # 1 for black, 2 for white
+                piece_at_pos[index] = int(piece.color) * len(chess.PIECE_TYPES) + piece.piece_type
 
             game_data.append(
-                {
-                    "piece_at_pos": piece_at_pos,
-                    "owner_at_pos": owner_at_pos,
-                    "turn": [int(winner)],
-                    "move": [move.from_square, move.to_square],
-                }
+                {"piece_at_pos": piece_at_pos, "turn": [int(winner)], "move": [move.from_square, move.to_square]}
             )
 
         # Make the move (even if it's not the winner's turn)
@@ -95,8 +88,8 @@ def get_winner_moves(games_data_df: pd.DataFrame) -> pd.DataFrame:
                 axis=1,
                 meta=ddutils.make_meta(
                     pd.DataFrame(
-                        [[[0], [0], [0], [0]]],
-                        columns=["piece_at_pos", "owner_at_pos", "turn", "move"],
+                        [[[0], [0], [0]]],
+                        columns=["piece_at_pos", "turn", "move"],
                     )
                 ),
             )
@@ -112,14 +105,14 @@ def parse_loaded_winner_moves(winner_moves_df: pd.DataFrame):
     def apply_row(row: pd.Series):
         return row.apply(json.loads)
 
-    winner_moves_df[["piece_at_pos", "owner_at_pos", "turn", "move"]] = winner_moves_df[
-        ["piece_at_pos", "owner_at_pos", "turn", "move"]
-    ].apply(apply_row)
+    winner_moves_df[["piece_at_pos", "turn", "move"]] = winner_moves_df[["piece_at_pos", "turn", "move"]].apply(
+        apply_row
+    )
 
 
 def winner_moves_df_to_np_arrays(winner_moves_df: pd.DataFrame):
-    # The output is respectively: piece_at_pos, owner_at_pos, turn, move
-    np_arrays = [np.array(winner_moves_df.iloc[..., i].to_list()) for i in range(0, 4)]
+    # The output is respectively: piece_at_pos, turn, move
+    np_arrays = [np.array(winner_moves_df.iloc[..., i].to_list()) for i in range(0, 3)]
     for i, arr in enumerate(np_arrays):
         if not np.issubdtype(arr.dtype, np.integer):
             continue
@@ -129,14 +122,14 @@ def winner_moves_df_to_np_arrays(winner_moves_df: pd.DataFrame):
 
 
 class ChessDataset(Dataset):
-    def __init__(self, piece_at_pos: np.ndarray, owner_at_pos: np.ndarray, turn: np.ndarray, move: np.ndarray):
-        if not len(piece_at_pos) == len(owner_at_pos) == len(turn) == len(move):
+    def __init__(self, piece_at_pos: np.ndarray, turn: np.ndarray, move: np.ndarray):
+        if not len(piece_at_pos) == len(turn) == len(move):
             raise ValueError("All np arrays must have the same number of data points")
 
-        self.piece_at_pos, self.owner_at_pos, self.turn, self.move = piece_at_pos, owner_at_pos, turn, move
+        self.piece_at_pos, self.turn, self.move = piece_at_pos, turn, move
 
     def __getitem__(self, index):
-        return self.piece_at_pos[index], self.owner_at_pos[index], self.turn[index], self.move[index]
+        return self.piece_at_pos[index], self.turn[index], self.move[index]
 
     def __len__(self):
         return len(self.piece_at_pos)
@@ -158,15 +151,9 @@ class ChessPretrainingModule(L.LightningModule):
         self.ce_loss = nn.CrossEntropyLoss()
 
     def get_ce_loss(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int):
-        piece_at_pos, owner_at_pos, turn, move = batch
+        piece_at_pos, turn, move = batch
         observations = TensorDict(
-            {
-                ChessEnv.OBSERVATION_KEY: {
-                    "piece_at_pos": piece_at_pos,
-                    "owner_at_pos": owner_at_pos,
-                    "turn": turn,
-                }
-            }
+            {ChessEnv.OBSERVATION_KEY: {"piece_at_pos": piece_at_pos, "turn": turn}}
         ).auto_batch_size_()
         observations = self.obs_transforms(observations)[ChessEnv.OBSERVATION_KEY]
         actions: list[torch.Tensor] = []
@@ -205,13 +192,13 @@ if __name__ == "__main__":
     )
 
     # Hyperparameters
-    max_epochs = 100
+    max_epochs = 200
     batch_size = 1024
-    lr, min_lr = 3e-4, 1e-6
+    lr, min_lr = 5e-4, 1e-6
     gradient_clip_val = 10.0
 
-    piece_at_pos, owner_at_pos, turn, move = winner_moves_df_to_np_arrays(load_winner_moves_df())
-    chess_dataset = ChessDataset(piece_at_pos, owner_at_pos, turn, move)
+    piece_at_pos, turn, move = winner_moves_df_to_np_arrays(load_winner_moves_df())
+    chess_dataset = ChessDataset(piece_at_pos, turn, move)
     train_dataset, val_dataset = random_split(chess_dataset, [0.9, 0.1])
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=2, persistent_workers=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=2, persistent_workers=True)
