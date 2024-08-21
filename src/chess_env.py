@@ -116,12 +116,15 @@ class ChessEnv(EnvBase):
     def reward_td(self):
         r_td = self.full_reward_spec.zero()
         outcome = self.board.outcome()
-        if outcome is None or outcome.winner is None:
+        if outcome is None:
             return r_td
 
-        winner, loser = int(outcome.winner), int(not outcome.winner)
-        indexes = torch.tensor([winner, loser], device=r_td.device)
-        r_td[self.reward_key][indexes] = torch.tensor([[1.0], [-1.0]], device=r_td.device)
+        if outcome.winner is None:
+            r_td[self.reward_key].fill_(-1.0)
+        else:
+            winner, loser = int(outcome.winner), int(not outcome.winner)
+            indexes = torch.tensor([winner, loser], device=r_td.device)
+            r_td[self.reward_key][indexes] = torch.tensor([[1.0], [-1.0]], device=r_td.device)
         return r_td
 
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:

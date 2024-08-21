@@ -32,7 +32,7 @@ def load_winner_moves_df():
         winner_moves_df = pd.read_csv(winner_moves_path, sep="|")
         parse_loaded_winner_moves(winner_moves_df)
     else:
-        games_data_df = pd.read_csv(games_data_path)[["id", "winner", "moves"]]
+        games_data_df = pd.read_csv(games_data_path)[["winner", "moves"]]
         winner_moves_df = get_winner_moves(games_data_df)
         winner_moves_df.to_csv(winner_moves_path, sep="|", index=False)
 
@@ -58,7 +58,6 @@ def map_game_to_winner_moves(row: pd.Series):
 
             game_data.append(
                 {
-                    "game_id": row["id"],
                     "piece_at_pos": piece_at_pos,
                     "owner_at_pos": owner_at_pos,
                     "turn": [int(winner)],
@@ -96,8 +95,8 @@ def get_winner_moves(games_data_df: pd.DataFrame) -> pd.DataFrame:
                 axis=1,
                 meta=ddutils.make_meta(
                     pd.DataFrame(
-                        [["game id", [0], [0], [0], [0]]],
-                        columns=["game_id", "piece_at_pos", "owner_at_pos", "turn", "move"],
+                        [[[0], [0], [0], [0]]],
+                        columns=["piece_at_pos", "owner_at_pos", "turn", "move"],
                     )
                 ),
             )
@@ -120,7 +119,7 @@ def parse_loaded_winner_moves(winner_moves_df: pd.DataFrame):
 
 def winner_moves_df_to_np_arrays(winner_moves_df: pd.DataFrame):
     # The output is respectively: piece_at_pos, owner_at_pos, turn, move
-    np_arrays = [np.array(winner_moves_df.iloc[..., i].to_list()) for i in range(1, 5)]
+    np_arrays = [np.array(winner_moves_df.iloc[..., i].to_list()) for i in range(0, 4)]
     for i, arr in enumerate(np_arrays):
         if not np.issubdtype(arr.dtype, np.integer):
             continue
@@ -144,7 +143,7 @@ class ChessDataset(Dataset):
 
 
 class ChessPretrainingModule(L.LightningModule):
-    def __init__(self, *args: Any, max_epochs: int, lr: float = 1e-4, **kwargs: Any):
+    def __init__(self, *args: Any, max_epochs: int, lr: float = 1e-4, min_lr: float = 0.0, **kwargs: Any):
         super().__init__(*args, **kwargs)
         base_env = ChessEnv()
         self.obs_transforms = Compose(*base_env.create_obs_transforms())
@@ -154,6 +153,7 @@ class ChessPretrainingModule(L.LightningModule):
 
         self.max_epochs = max_epochs
         self.lr = lr
+        self.min_lr = min_lr
         self.n_actions = 2
         self.ce_loss = nn.CrossEntropyLoss()
 
@@ -192,7 +192,7 @@ class ChessPretrainingModule(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.action_nets.parameters(), lr=self.lr)
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.max_epochs)
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, self.max_epochs, self.min_lr)
         return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
 
 
@@ -205,32 +205,30 @@ if __name__ == "__main__":
     )
 
     # Hyperparameters
-    max_epochs = 75
+    max_epochs = 100
     batch_size = 1024
-    lr = 5e-4
+    lr, min_lr = 3e-4, 1e-6
     gradient_clip_val = 10.0
 
     piece_at_pos, owner_at_pos, turn, move = winner_moves_df_to_np_arrays(load_winner_moves_df())
     chess_dataset = ChessDataset(piece_at_pos, owner_at_pos, turn, move)
     train_dataset, val_dataset = random_split(chess_dataset, [0.9, 0.1])
-    train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, num_workers=2, prefetch_factor=4, persistent_workers=True
-    )
-    val_dataloader = DataLoader(
-        val_dataset, batch_size=batch_size, num_workers=2, prefetch_factor=4, persistent_workers=True
-    )
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=2, persistent_workers=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=2, persistent_workers=True)
 
-    model = ChessPretrainingModule(max_epochs=max_epochs, lr=lr)
+    model = ChessPretrainingModule(max_epochs=max_epochs, lr=lr, min_lr=min_lr)
     checkpoint_cb = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1)
     trainer = L.Trainer(
         max_epochs=max_epochs,
         gradient_clip_val=gradient_clip_val,
-        callbacks=[EarlyStopping(monitor="val_loss", mode="min"), checkpoint_cb],
+        callbacks=[EarlyStopping(monitor="val_loss", mode="min", patience=10), checkpoint_cb],
         accelerator="gpu",
     )
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    best_model = ChessPretrainingModule.load_from_checkpoint(checkpoint_cb.best_model_path)
+    best_model = ChessPretrainingModule.load_from_checkpoint(
+        checkpoint_cb.best_model_path, max_epochs=max_epochs, lr=lr, min_lr=min_lr
+    )
     path_before_ext, _ = os.path.splitext(checkpoint_cb.best_model_path)
     torch.save(best_model.obs_transforms.state_dict(), f"{path_before_ext}-obs_transforms.pt")
     torch.save(best_model.action_nets.state_dict(), f"{path_before_ext}-action_nets.pt")

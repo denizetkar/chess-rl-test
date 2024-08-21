@@ -47,7 +47,7 @@ if __name__ == "__main__":
     training_iters = 1
     minibatch_size = frames_per_batch // training_iters
     max_grad_norm = 10.0
-    lr = 1e-4
+    lr, min_lr = 1e-4, 1e-6
 
     clip_epsilon = 0.1
     gamma = 0.99
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     GAE = loss_module.value_estimator
 
     optim = torch.optim.Adam(loss_module.parameters(), lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, outer_epochs, 0.0)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, outer_epochs, min_lr)
 
     logger = TensorboardLogger(exp_name="Chess PPO", log_dir="tb_logs")
     for outer_i, td_data in enumerate(collector):
@@ -151,12 +151,19 @@ if __name__ == "__main__":
         turn_data = transforms.inv(td_data)[env.OBSERVATION_KEY, "turn"].unsqueeze(-2)
         selected_rewards = td_data.get(("next", "agents", "episode_reward")).gather(index=turn_data, dim=-2)
         episode_reward_mean = selected_rewards.mean().item()
-        episode_reward_abs_sum = selected_rewards.type(torch.long).abs().sum().item()
+        episode_reward_neg_sum = selected_rewards.type(torch.long).clip(max=0.0).sum().item()
+        episode_reward_pos_sum = selected_rewards.type(torch.long).clip(min=0.0).sum().item()
         episode_games_done = td_data["next", "done"].sum().item()
         logger.log_scalar("episode_reward_mean", episode_reward_mean, step=outer_i)
-        logger.log_scalar("episode_reward_abs_sum", episode_reward_abs_sum, step=outer_i)
+        logger.log_scalar("episode_reward_neg_sum", episode_reward_neg_sum, step=outer_i)
+        logger.log_scalar("episode_reward_pos_sum", episode_reward_pos_sum, step=outer_i)
         logger.log_scalar("episode_games_done", episode_games_done, step=outer_i)
-        logging.info("Average/AbsSum episode reward: %f/%f", episode_reward_mean, episode_reward_abs_sum)
+        logging.info(
+            "Average/NegSum/PosSum episode reward: %f/%f/%f",
+            episode_reward_mean,
+            episode_reward_neg_sum,
+            episode_reward_pos_sum,
+        )
         logging.info("Episode games done: %d", episode_games_done)
 
         collector.update_policy_weights_()
