@@ -81,7 +81,7 @@ class DependentCategoricalsDistribution(CompositeDistribution):
         # `ClipPPOLoss.forward` expects the same shape from `sample_log_probs` and `advantage`. WTF?
         if self.agent_dim_expander is not None:
             remaining_shape = log_p.shape[len(inner_actions_td.shape) :]
-            self.agent_dim_expander.dim = -1 if len(remaining_shape) == 0 else -2
+            self.agent_dim_expander.dim = -1 - len(remaining_shape)
             expanded_log_p: tuple[torch.Tensor] = self.agent_dim_expander(log_p)
             log_p = expanded_log_p[0]
 

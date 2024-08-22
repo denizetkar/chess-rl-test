@@ -139,11 +139,11 @@ class ChessDataset(Dataset):
 class ChessPretrainingModule(L.LightningModule):
     def __init__(self, *args: Any, max_epochs: int, lr: float = 1e-4, min_lr: float = 0.0, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        base_env = ChessEnv()
-        self.obs_transforms = Compose(*base_env.create_obs_transforms())
-        final_env = TransformedEnv(base_env, self.obs_transforms)
-        self.action_nets = create_action_nets(base_env, final_env, self.device)
-        self.logits_fn = create_logits_fn(base_env, self.action_nets)
+        self.base_env = ChessEnv()
+        self.obs_transforms = Compose(*self.base_env.create_obs_transforms())
+        final_env = TransformedEnv(self.base_env, self.obs_transforms)
+        self.action_nets = create_action_nets(self.base_env, final_env, self.device)
+        self.logits_fn = create_logits_fn(self.base_env, self.action_nets)
 
         self.max_epochs = max_epochs
         self.lr = lr
@@ -154,7 +154,9 @@ class ChessPretrainingModule(L.LightningModule):
     def get_ce_loss(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int):
         piece_at_pos, turn, move = batch
         # Turn piece_at_pos from categorical to one-hot
-        piece_at_pos = F.one_hot(piece_at_pos, num_classes=2 * len(chess.PIECE_TYPES)).flatten(-2, -1)
+        piece_at_pos = F.one_hot(piece_at_pos, num_classes=self.base_env.n_agents * len(chess.PIECE_TYPES)).flatten(
+            -2, -1
+        )
         observations = TensorDict(
             {ChessEnv.OBSERVATION_KEY: {"piece_at_pos": piece_at_pos, "turn": turn}}
         ).auto_batch_size_()

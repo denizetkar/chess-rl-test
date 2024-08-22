@@ -32,9 +32,10 @@ class ChessEnv(EnvBase):
             run_type_checks=run_type_checks,
             allow_done_after_reset=allow_done_after_reset,
         )
-        self.rand_player_idx = rand_player_idx % 2 == 1 if rand_player_idx is not None else None
         self.n_agents = 2
-        self.total_piece_cnt = 2 * len(chess.PIECE_TYPES)
+        # True for a white, False for a black random agent
+        self.rand_player_idx = rand_player_idx % self.n_agents == 1 if rand_player_idx is not None else None
+        self.total_piece_cnt = self.n_agents * len(chess.PIECE_TYPES)
         self.observation_spec = CompositeSpec(
             {
                 ChessEnv.OBSERVATION_KEY: CompositeSpec(
