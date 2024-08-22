@@ -11,6 +11,7 @@ from torchrl.data import CompositeSpec, DiscreteTensorSpec, MultiOneHotDiscreteT
 
 from custom_tensor_specs import DependentDiscreteTensorsSpec
 from custom_transforms import DiscreteToContinuousTransform, DoubleToFloat
+from utils import _get_move_external
 
 
 class ChessEnv(EnvBase):
@@ -19,6 +20,7 @@ class ChessEnv(EnvBase):
     def __init__(
         self,
         *,
+        rand_player_idx: int | None = None,
         device: torch.device | str | int = None,
         batch_size: torch.Size | None = None,
         run_type_checks: bool = False,
@@ -30,6 +32,7 @@ class ChessEnv(EnvBase):
             run_type_checks=run_type_checks,
             allow_done_after_reset=allow_done_after_reset,
         )
+        self.rand_player_idx = rand_player_idx % 2 == 1 if rand_player_idx is not None else None
         self.n_agents = 2
         self.total_piece_cnt = 2 * len(chess.PIECE_TYPES)
         self.observation_spec = CompositeSpec(
@@ -105,7 +108,7 @@ class ChessEnv(EnvBase):
         d_td = self.full_done_spec.zero()
         is_done = self.board.is_game_over()
         d_td["done"][...] = is_done
-        d_td["agents", "done"][...] = is_done
+        d_td[self.done_key][...] = is_done
         return d_td
 
     @property
@@ -128,7 +131,11 @@ class ChessEnv(EnvBase):
         return td
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action: TensorDict = tensordict[self.action_key]
+        if self.rand_player_idx is None or self.rand_player_idx != self.board.turn:
+            action: TensorDict = tensordict[self.action_key]
+        else:
+            tensordict = _get_move_external(tensordict)
+            action = tensordict[self.action_key]
         from_square, to_square = action["0"].item(), action["1"].item()
         move = chess.Move(from_square, to_square)
         try:
@@ -148,8 +155,11 @@ class ChessEnv(EnvBase):
             seed: int = torch.empty((), dtype=torch.int64).random_().item()
         torch.manual_seed(seed)
 
-    def create_obs_transforms(self):
-        obs_samples: TensorDict = self.full_observation_spec.rand((10000,)).type(torch.float64)
+    def create_obs_transforms(self, sample_population: int | None = 10000):
+        if sample_population is not None:
+            obs_samples: TensorDict = self.full_observation_spec.rand((sample_population,)).type(torch.float64)
+        else:
+            obs_samples: TensorDict = self.full_observation_spec.zero((2,)).type(torch.float64)
         mu = obs_samples.mean(dim=0)
         std = obs_samples.std(dim=0)
         obs_transforms: list[Transform] = []
@@ -179,7 +189,7 @@ class ChessEnv(EnvBase):
         torch.save(obs_transforms.state_dict(), save_path)
 
     def load_obs_transforms(self, save_path: str | None = None):
-        obs_transforms_list = self.create_obs_transforms()
+        obs_transforms_list = self.create_obs_transforms(sample_population=None)
         if save_path is None or not os.path.exists(save_path):
             return obs_transforms_list
 

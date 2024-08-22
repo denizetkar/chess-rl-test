@@ -82,8 +82,7 @@ class DependentCategoricalsDistribution(CompositeDistribution):
         if self.agent_dim_expander is not None:
             remaining_shape = log_p.shape[len(inner_actions_td.shape) :]
             self.agent_dim_expander.dim = -1 if len(remaining_shape) == 0 else -2
-            expanded_log_p: tuple[torch.Tensor]
-            expanded_log_p = self.agent_dim_expander(log_p)
+            expanded_log_p: tuple[torch.Tensor] = self.agent_dim_expander(log_p)
             log_p = expanded_log_p[0]
 
         # `PPOLoss._log_weight` expects a torch.Tensor unlike `ProbabilisticTensorDictModule.forward`. WTF?

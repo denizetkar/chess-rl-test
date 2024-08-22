@@ -1,24 +1,10 @@
 import torch
-import chess
 from tensordict import TensorDict
 from actor_critic import create_actor, create_logits_fn, load_action_nets
 from chess_env import ChessEnv
 from torchrl.envs.transforms import TransformedEnv, Compose
-from torchrl.data.tensor_specs import DiscreteTensorSpec
-from utils import _get_next_mask
 
-
-def _get_move_external(td: TensorDict):
-    # move_str = input("Your turn. Write your move (UCI):")
-    # move = chess.Move.from_uci(move_str)
-    actions: list[torch.Tensor] = []
-    actions_td = TensorDict()
-    for i in range(2):
-        dependent_mask = _get_next_mask([], [64, 64], td["action_mask"], actions)
-        action_i = DiscreteTensorSpec(64, device=td.device, mask=dependent_mask).sample()
-        actions.append(action_i)
-        actions_td.set(str(i), action_i)
-    return actions_td
+# import chess
 
 
 if __name__ == "__main__":
@@ -26,7 +12,7 @@ if __name__ == "__main__":
     action_nets_save_path = "./lightning_logs/version_1/checkpoints/epoch=34-step=17535-action_nets-PPO.pt"
     default_device = torch.device("cpu")
 
-    env = ChessEnv()
+    env = ChessEnv(rand_player_idx=1)
     transforms = Compose(*env.load_obs_transforms(obs_transforms_save_path))
     tenv = TransformedEnv(env, transforms, cache_specs=False, device=default_device)
 
@@ -41,19 +27,13 @@ if __name__ == "__main__":
         with torch.no_grad():
             while not env.board.is_game_over():
                 # print(f"Turn: {turn_names[int(env.board.turn)]}")
-                # input("Click to continue...")
 
-                if env.board.turn:
-                    actions_td = _get_move_external(td)
-                    td_actor: TensorDict = td.set("action", actions_td)
-                else:
-                    td_actor: TensorDict = actor(td)
-                move = chess.Move(td_actor["action", "0"].item(), td_actor["action", "1"].item())
-                # print(f"Move: {move}")
-
+                td_actor: TensorDict = actor(td)
                 td_step = tenv.step(td_actor)
                 td = td_step["next"]
 
+                # move = chess.Move(td_step[env.action_key, "0"].item(), td_step[env.action_key, "1"].item())
+                # print(f"Move: {move}")
                 # print(env.board)
 
         outcome = env.board.outcome()
