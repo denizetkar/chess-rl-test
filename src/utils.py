@@ -14,7 +14,6 @@ def _get_next_mask(
     action_indices = tuple(actions)
     indices = batch_indices + action_indices
 
-    # self.mask cannot be None here
     filtered_mask = mask[indices]
 
     legal_action_mask = filtered_mask.any(dim=list(range(-num_actions_not_taken + 1, 0)))

@@ -4,8 +4,6 @@ from actor_critic import create_actor, create_logits_fn, load_action_nets
 from chess_env import ChessEnv
 from torchrl.envs.transforms import TransformedEnv, Compose
 
-# import chess
-
 
 if __name__ == "__main__":
     obs_transforms_save_path = "./lightning_logs/version_1/checkpoints/epoch=34-step=17535-obs_transforms.pt"
@@ -32,8 +30,7 @@ if __name__ == "__main__":
                 td_step = tenv.step(td_actor)
                 td = td_step["next"]
 
-                # move = chess.Move(td_step[env.action_key, "0"].item(), td_step[env.action_key, "1"].item())
-                # print(f"Move: {move}")
+                # print(f"Move: {env.board.move_stack[-1]}")
                 # print(env.board)
 
         outcome = env.board.outcome()

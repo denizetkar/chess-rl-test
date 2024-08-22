@@ -13,8 +13,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from chess_env import ChessEnv
 from torchrl.envs.transforms import TransformedEnv, Compose
 from torchrl.envs import ParallelEnv, RewardSum
-
-# from torchrl.envs.utils import check_env_specs
+from torchrl.envs.utils import check_env_specs
 
 from actor_critic import load_action_nets, save_action_nets, create_actor, load_critic, save_critic, create_logits_fn
 
@@ -64,14 +63,18 @@ if __name__ == "__main__":
         RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
     )
 
-    def create_tenv():
-        env = ChessEnv()
+    def create_tenv(index: int | None = None):
+        # If you want self-play, pass `rand_player_idx=None`
+        env = ChessEnv(rand_player_idx=index)
         tenv = TransformedEnv(env, transforms.clone(), cache_specs=False, device=default_device)
-        # check_env_specs(tenv)
+        check_env_specs(tenv)
         return tenv
 
-    penv = ParallelEnv(n_envs, create_tenv)
-    # penv = create_tenv()
+    penv = ParallelEnv(
+        num_workers=n_envs,
+        create_env_fn=[create_tenv] * n_envs,
+        create_env_kwargs=[{"index": i} for i in range(n_envs)],
+    )
 
     action_nets = load_action_nets(env, penv, default_device, action_nets_save_path)
     actor = create_actor(env, penv, default_device, create_logits_fn(env, action_nets))

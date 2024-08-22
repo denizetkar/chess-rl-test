@@ -9,8 +9,6 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from chess_env import ChessEnv
 from torchrl.envs import EnvBase
 
-# from torchrl.envs.utils import check_env_specs
-
 from torchrl.modules import MLP, ProbabilisticActor
 from custom_modules import ExpandNewDimension, NegConcat
 from tensordict.nn import InteractionType
